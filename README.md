@@ -45,7 +45,7 @@ Partie_2/
   - Rapport.pdf
   - Code.Rmd
   - otherpossibilitiesCode.Rmd
-  - Res_all_cleaned.xlsx
+  - Res_all_cleanedb.xlsx
 
 Résultats Principaux
 ---------------------
