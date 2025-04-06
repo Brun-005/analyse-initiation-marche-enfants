@@ -1,0 +1,514 @@
+---
+title: "Etude de cas"
+output: html_document
+date: "2025-03-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readxl)
+df <- read_excel("RES_all_cleaned2b.xlsx", sheet = "All")
+```
+
+
+
+
+
+```{r}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(MASS)
+library(kableExtra)
+```
+
+
+```{r}
+# Vérifier la répartition des groupes
+print(table(df$GROUPE))
+
+# Convertir en numérique 
+df <- df %>%
+  mutate(Weight = as.numeric(Weight),
+         Height = as.numeric(Height),
+         Age = as.numeric(Age))
+
+
+# Comparaison des statistiques descriptives entre NT et TSA
+summary_stats <- df %>%
+  group_by(GROUPE) %>%
+  summarise(
+    Age_Moyenne = mean(Age, na.rm = TRUE),
+    Age_EcartType = sd(Age, na.rm = TRUE),
+    Taille_Moyenne = mean(Height, na.rm = TRUE),
+    Taille_EcartType = sd(Height, na.rm = TRUE),
+    Poids_Moyen = mean(Weight),
+    Poids_EcartType = sd(Weight, na.rm = TRUE)
+  )
+kable(summary_stats)
+
+# Visualisation des distributions
+p1 <- ggplot(df, aes(x = GROUPE, y = Age)) + geom_boxplot() + ggtitle("Distribution de l'âge")
+p2 <- ggplot(df, aes(x = GROUPE, y = Height)) + geom_boxplot() + ggtitle("Distribution de la taille")
+p3 <- ggplot(df, aes(x = GROUPE, y = Weight)) + geom_boxplot() + ggtitle("Distribution du poids")
+print(p1)
+print(p2)
+print(p3)
+
+# Test de Student pour comparer les moyennes
+age_test <- t.test(Age ~ GROUPE, data = df)
+taille_test <- t.test(Height ~ GROUPE, data = df)
+poids_test <- t.test(Weight ~ GROUPE, data = df)
+
+print(age_test)
+print(taille_test)
+print(poids_test)
+
+# Vérification avec un test non paramétrique (Mann-Whitney si non normalité)
+age_mw <- wilcox.test(Age ~ GROUPE, data = df)
+taille_mw <- wilcox.test(Height ~ GROUPE, data = df)
+poids_mw <- wilcox.test(Weight ~ GROUPE, data = df)
+
+print(age_mw)
+print(taille_mw)
+print(poids_mw)
+
+```
+
+
+
+## Q2.3 : Synthèse des données descriptives
+
+## Tableau descriptif
+```{r}
+# Charger les bibliothèques nécessaires
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+# Définition des groupes de variables
+vars_generales <- c("Age", "Height", "Weight")
+vars_motrices <- c("TAju(ms)", "TLoad(ms)", "TUnload(ms)", "CoP_tot_AP(/Long)", "CoP_tot_ML(/Larg)")
+vars_scores <- c("AWR", "COG", "COM", "MOT", "RRB", "SCI", "TOT")
+
+# Vérification des variables existantes dans le dataframe
+vars_generales <- intersect(vars_generales, names(df_selected))
+vars_motrices <- intersect(vars_motrices, names(df_selected))
+vars_scores <- intersect(vars_scores, names(df_selected))
+
+# Fonction pour générer un tableau récapitulatif et l'afficher avec `kable()`
+generer_stats <- function(df, variables, titre) {
+  df_subset <- df[, c("GROUPE", variables), drop = FALSE]  # Sélection des variables
+  
+  stats <- df_subset %>%
+    group_by(GROUPE) %>%
+    summarise(across(where(is.numeric), list(
+      Moyenne = ~mean(. , na.rm = TRUE),
+      EcartType = ~sd(. , na.rm = TRUE),
+      Mediane = ~median(. , na.rm = TRUE)
+    ), .names = "{.col}_{.fn}"))
+  
+  # Afficher le titre et le tableau formaté avec kable()
+  cat("\n##", titre, "\n")
+  kable(stats, format = "markdown", caption = titre) %>%
+    kable_styling(full_width = FALSE, position = "center")
+}
+
+# Générer et afficher les tables avec kable()
+generer_stats(df_selected, vars_generales, "Tableau des Données Générales")
+generer_stats(df_selected, vars_motrices, "Tableau des Données Motrices")
+generer_stats(df_selected, vars_scores, "Tableau des Scores TSA")
+
+
+```
+
+
+## Visualisation des distributions
+```{r}
+# Fonction pour générer des boxplots
+plot_boxplot <- function(var) {
+  ggplot(df, aes(x = GROUPE, y = !!sym(var), fill = GROUPE)) +
+    geom_boxplot() +
+    ggtitle(paste("Distribution de", var)) +
+    theme_minimal()
+}
+
+# Générer les boxplots des variables clés
+plot_boxplot("Age")
+plot_boxplot("Height")
+plot_boxplot("Weight")
+plot_boxplot("TAju(ms)")
+plot_boxplot("TLoad(ms)")
+plot_boxplot("TUnload(ms)")
+plot_boxplot("TOT")  # Score total TSA
+
+```
+
+```{r}
+# Fonction pour tracer les histogrammes
+plot_histogram <- function(var) {
+  ggplot(df, aes(x = !!sym(var), fill = GROUPE)) +
+    geom_histogram(alpha = 0.6, position = "identity", bins = 10) +
+    ggtitle(paste("Répartition de", var)) +
+    theme_minimal()
+}
+
+# Générer les histogrammes
+plot_histogram("Age")
+plot_histogram("Height")
+plot_histogram("Weight")
+plot_histogram("TAju(ms)")
+plot_histogram("TLoad(ms)")
+plot_histogram("TUnload(ms)")
+plot_histogram("TOT")  # Score total TSA
+
+```
+## Q3.1
+
+## Vérifier la normalité et l’égalité des variances
+```{r}
+# Charger les bibliothèques nécessaires
+library(dplyr)
+library(ggplot2)
+library(car)
+
+# Définir les variables à tester
+variables_a_tester <- c("Age", "Height", "Weight", "TAju(ms)", "TLoad(ms)", "TUnload(ms)")
+
+# Vérifier la normalité avec le test de Shapiro-Wilk
+test_normalite <- lapply(df_selected[, variables_a_tester], function(x) shapiro.test(x)$p.value)
+
+# Afficher les p-values des tests de normalité
+test_normalite_df <- data.frame(Variable = variables_a_tester, P_Value = unlist(test_normalite))
+print("Résultats du test de normalité (Shapiro-Wilk) :")
+print(test_normalite_df)
+
+# Vérifier l’égalité des variances avec le test de Levene
+test_levene <- leveneTest(df_selected$Age ~ df_selected$GROUPE)
+print("Résultats du test de Levene (homogénéité des variances) :")
+print(test_levene)
+
+```
+
+
+## Appliquer le test statistique
+```{r}
+# Appliquer le test adapté selon les résultats de normalité et homogénéité
+resultats_tests <- list()
+
+for (var in variables_a_tester) {
+  if (shapiro.test(df_selected[[var]])$p.value > 0.05) {
+    # Si les données sont normales, faire un test t de Student
+    test <- t.test(df_selected[[var]] ~ df_selected$GROUPE, var.equal = TRUE)
+    resultats_tests[[var]] <- test
+  } else {
+    # Sinon, faire un test de Mann-Whitney
+    test <- wilcox.test(df_selected[[var]] ~ df_selected$GROUPE)
+    resultats_tests[[var]] <- test
+  }
+}
+
+# Afficher les résultats
+print("Résultats des tests statistiques :")
+for (var in names(resultats_tests)) {
+  cat("\n###", var, "###\n")
+  print(resultats_tests[[var]])
+}
+
+```
+## Résumé des résultats statistiques dans un tableau
+```{r}
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+# Créer un tableau récapitulatif
+res_df <- tibble::tibble(
+  Variable = names(resultats_tests),
+  Test = sapply(resultats_tests, function(x) {
+  if ("htest" %in% class(x)) {
+    if (!is.null(x$method)) x$method else "htest"
+  } else {
+    "Inconnu"
+  }
+}),
+  P_Value = sapply(resultats_tests, function(x) x$p.value),
+  Significatif = sapply(resultats_tests, function(x) ifelse(x$p.value < 0.05, "Oui", "Non"))
+)
+
+# Afficher avec kable
+kable(res_df, caption = "Résultats des tests statistiques entre NT et TSA") %>%
+  kable_styling(full_width = FALSE, position = "center")
+
+```
+## Graphiques comparatifs
+Des boxplots permettent d'illustrer visuellement les différences entre les groupes pour chaque variable.
+```{r}
+library(ggplot2)
+
+# Variables à représenter
+variables_a_tester <- c("Age", "Height", "Weight", "TAju(ms)", "TLoad(ms)", "TUnload(ms)")
+
+# Fonction pour créer un boxplot
+plot_boxplot <- function(var) {
+  ggplot(df_selected, aes(x = GROUPE, y = .data[[var]], fill = GROUPE)) +
+    geom_boxplot(alpha = 0.7) +
+    labs(title = paste("Distribution de", var), x = "Groupe", y = var) +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 14, face = "bold"))
+}
+
+# Afficher tous les boxplots
+for (var in variables_a_tester) {
+  print(plot_boxplot(var))
+}
+
+```
+##  Q3.2 : Vérification d'une corrélation entre troubles de l'anticipation motrice et scores d'évaluation du TSA (SRS et ADOS)
+
+## Identification claire du test statistique adapté
+
+Deux principaux tests statistiques sont possibles pour vérifier une corrélation entre variables quantitatives :
+
+    Corrélation de Pearson
+
+        Nécessite une distribution normale des variables continues.
+
+        Teste une corrélation linéaire.
+
+    Corrélation de Spearman (rho)
+
+        Adaptée pour des distributions non-normales.
+
+        Teste une corrélation monotone (non nécessairement linéaire).
+
+⚠️ Conditions :
+
+    Vérification préalable de la normalité des distributions.
+
+    Si une seule variable (ou plus) est non-normale, alors la corrélation de Spearman sera choisie.
+
+### Vérification préalable de la normalité des variables
+```{r}
+# Charger les librairies
+library(dplyr)
+
+# Variables à tester
+vars_biomecaniques <- c("TAju(ms)", "TLoad(ms)", "TUnload(ms)", "CoP_tot_AP(/Long)", "CoP_tot_ML(/Larg)")
+vars_scores <- c("AWR", "COG", "COM", "MOT", "RRB", "SCI", "TOT")
+
+# Tester la normalité (Shapiro-Wilk)
+normalite_bio <- sapply(df_selected[, vars_biomecaniques], function(x) shapiro.test(x)$p.value)
+normalite_scores <- sapply(df_selected[, vars_scores], function(x) shapiro.test(x)$p.value)
+
+# Résultats normalité
+normalite_df <- data.frame(
+  Variable = c(vars_biomecaniques, vars_scores),
+  P_Value = c(normalite_bio, normalite_scores),
+  Normalite = ifelse(c(normalite_bio, normalite_scores) > 0.05, "Oui", "Non")
+)
+
+print(normalite_df)
+```
+✅ Interprétation :
+
+    Si Normalite = Oui, la variable suit une distribution normale.
+
+    Si une variable est non-normale, le test de Spearman sera utilisé.
+    
+##  Application des tests de corrélation
+```{r}
+# Matrice pour stocker résultats
+resultats_corr <- data.frame()
+
+# Boucle sur chaque combinaison (biomécanique vs scores TSA)
+for (bio in vars_biomecaniques) {
+  for (score in vars_scores) {
+    
+    # Choix du test selon normalité
+    if (shapiro.test(df_selected[[bio]])$p.value > 0.05 & shapiro.test(df_selected[[score]])$p.value > 0.05) {
+      test_corr <- cor.test(df_selected[[bio]], df_selected[[score]], method = "pearson")
+      methode <- "Pearson"
+    } else {
+      test_corr <- cor.test(df_selected[[bio]], df_selected[[score]], method = "spearman")
+      methode <- "Spearman"
+    }
+    
+    # Stockage des résultats
+    resultats_corr <- rbind(resultats_corr, data.frame(
+      Variable_Biomecanique = bio,
+      Variable_Score = score,
+      Methode = methode,
+      Coefficient = round(test_corr$estimate, 3),
+      P_Value = round(test_corr$p.value, 4),
+      Significatif = ifelse(test_corr$p.value < 0.05, "Oui", "Non")
+    ))
+  }
+}
+
+# Afficher résultats complets
+library(knitr)
+library(kableExtra)
+
+kable(resultats_corr, caption = "Résultats des tests de corrélation entre variables biomécaniques et scores TSA") %>%
+  kable_styling(full_width = FALSE, position = "center")
+
+```
+
+## Visualisation graphique
+```{r}
+library(ggplot2)
+
+# Filtrer résultats significatifs
+significatifs <- resultats_corr %>% filter(Significatif == "Oui")
+
+# Graphiques scatterplot corrigés
+for(i in 1:nrow(significatifs)) {
+  
+  bio <- significatifs$Variable_Biomecanique[i]
+  score <- significatifs$Variable_Score[i]
+  methode <- significatifs$Methode[i]
+  coeff <- significatifs$Coefficient[i]
+  pval <- significatifs$P_Value[i]
+
+  p <- ggplot(df_selected, aes(x = .data[[bio]], y = .data[[score]], color = GROUPE)) +
+    geom_point(size = 3, alpha = 0.7) +
+    geom_smooth(method = "lm", se = TRUE, col = "black") +
+    labs(title = paste("Corrélation", methode, "entre", bio, "et", score),
+         subtitle = paste("Coefficient =", coeff, ", p-value =", pval),
+         x = bio, y = score) +
+    theme_minimal()
+  
+print(p)
+}
+
+```
+
+
+
+## Q3.3 — Clustering des enfants selon leurs profils
+
+
+
+### Préparation des données
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Sélection des variables de clustering
+vars_scores <- c("AWR", "COG", "COM", "MOT", "RRB", "SCI", "TOT")
+# Appliquer na.omit et conserver l’index des lignes utilisées
+df_clust <- df_selected[, vars_scores]
+rows_valides <- complete.cases(df_clust)
+
+df_clust_clean <- df_clust[rows_valides, ]
+df_clust_scaled <- scale(df_clust_clean)
+
+
+```
+
+
+## Choisir le nombre de clusters (méthode du coude)
+```{r}
+# Méthode du coude pour déterminer le bon nombre de clusters
+library(factoextra)
+fviz_nbclust(df_clust_scaled, kmeans, method = "wss") +
+  theme_minimal() +
+  labs(title = "Méthode du coude : choix optimal du nombre de clusters")
+
+```
+D'après la courbre, on choisit k = 3 comme de nombre de clusters
+
+## Appliquer K-means
+```{r}
+set.seed(123)
+k <- 3
+kmeans_result <- kmeans(df_clust_scaled, centers = k, nstart = 25)
+
+ # Initialiser cluster à NA pour toutes les lignes
+df_selected$cluster <- NA
+
+# Affecter les clusters uniquement aux lignes valides
+df_selected$cluster[rows_valides] <- as.factor(kmeans_result$cluster)
+
+
+```
+
+## Charger les bonnes bibliothèques
+```{r}
+library(FactoMineR)   # Pour faire l'ACP
+library(factoextra)   # Pour visualiser l'ACP et les clusters
+
+```
+## Réaliser l’ACP sur les variables SRS
+```{r}
+# Réutiliser les données nettoyées (les mêmes que pour le clustering)
+res_pca <- PCA(df_clust_clean, graph = TRUE)
+
+```
+
+
+
+
+
+
+
+
+```{r}
+# Extraire les coordonnées PCA
+coord_pca <- as.data.frame(res_pca$ind$coord)
+
+# Ajouter les infos utiles : cluster et éventuellement le groupe (NT / TSA)
+coord_pca$Cluster <- df_selected$cluster[rows_valides]
+coord_pca$GROUPE <- df_selected$GROUPE[rows_valides]
+
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(coord_pca, aes(x = Dim.1, y = Dim.2, color = Cluster)) +
+  geom_point(size = 3, alpha = 0.8) +
+  labs(
+    title = "Projection des enfants sur les deux premières dimensions de l’ACP",
+    subtitle = "Coloration par cluster issu du K-means",
+    x = paste0("Dimension 1 (", round(res_pca$eig[1, 2], 1), "%)"),
+    y = paste0("Dimension 2 (", round(res_pca$eig[2, 2], 1), "%)")
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14))
+
+```
+##  Résumé en tableau
+```{r}
+# Ajouter les clusters à la version nettoyée
+df_clusterisés <- df_selected[rows_valides, ]
+df_clusterisés$cluster <- as.factor(kmeans_result$cluster)
+
+# Sélectionner uniquement les variables SRS utilisées pour le clustering
+vars_scores_valides <- intersect(colnames(df_clusterisés), vars_scores)
+
+# Calcul des moyennes par cluster
+library(dplyr)
+
+stats_par_cluster <- df_clusterisés %>%
+  group_by(cluster) %>%
+  summarise(across(all_of(vars_scores_valides), list(
+    Moyenne = ~mean(., na.rm = TRUE),
+    EcartType = ~sd(., na.rm = TRUE)
+  ), .names = "{.col}_{.fn}"))
+
+# Affichage avec kable (optionnel si tu fais du R Markdown)
+library(knitr)
+library(kableExtra)
+
+kable(stats_par_cluster, digits = 2, caption = "Moyennes et écarts-types des scores TSA par cluster") %>%
+  kable_styling(full_width = FALSE)
+
+```
+
+

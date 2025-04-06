@@ -1,0 +1,270 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-03-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(dplyr)
+```
+
+
+```{r cars}
+df = read_excel("RES_all_cleaned2b.xlsx", sheet = "All") 
+
+str(df)
+
+df <- df %>%
+  mutate(Weight = as.numeric(Weight))
+df <- df %>%
+  mutate(`Score CRR` = as.numeric(`Score CRR`))
+
+summary(df)
+```
+
+```{r}
+install.packages("tableone")
+```
+
+
+```{r}
+library(tableone)
+
+# Variables à comparer
+vars = c("Age", "Height", "Weight")
+
+# Création de la table par groupe
+
+table1 = CreateTableOne(vars = vars, strata = "GROUPE", data = df, test = TRUE)
+print(table1)
+
+#  Interprétation : Si les tests montrent aucune différence significative (p > 0.05) entre TSA et NT, alors l’appariement est bon.
+
+```
+
+## Including Plots
+
+
+```{r pressure, echo=FALSE}
+library(ggplot2)
+
+# Les histogrammes permettent de voir si les distributions sont similaires entre les groupes.
+
+ggplot(df, aes(x = Age, fill = GROUPE)) +
+  geom_histogram(alpha = 0.5, position = "identity", bins = 10) +
+  labs(title = "Distribution de l'âge par groupe")
+
+ggplot(df, aes(x = Height, fill = GROUPE)) +
+  geom_histogram(alpha = 0.5, position = "identity", bins = 10) +
+  labs(title = "Distribution de la taille par groupe")
+
+ggplot(df, aes(x = Weight, fill = GROUPE)) +
+  geom_histogram(alpha = 0.5, position = "identity", bins = 10) +
+  labs(title = "Distribution de la masse par groupe")
+
+```
+
+
+```{r}
+ggplot(df, aes(x = GROUPE, y = Age, fill = GROUPE)) +
+  geom_boxplot() + labs(title = "Comparaison de l'âge entre groupes")
+
+ggplot(df, aes(x = GROUPE, y = Height, fill = GROUPE)) +
+  geom_boxplot() + labs(title = "Comparaison de la taille entre groupes")
+
+ggplot(df, aes(x = GROUPE, y = Weight, fill = GROUPE)) +
+  geom_boxplot() + labs(title = "Comparaison de la masse entre groupes")
+
+```
+
+```{r}
+# Vérification de l’équilibre avec la SMD
+
+# Fonction pour calculer le Standardized Mean Difference (SMD)
+
+df_TSA <- df[df$GROUPE == "TSA", ]
+df_TD <- df[df$GROUPE == "TD", ]
+# Fonction pour calculer la Standardized Mean Difference (SMD)
+smd <- function(df_TD, df_TSA, variable) {
+  # Vérification si la variable existe dans les dataframes
+  if (!variable %in% names(df_TD)) {
+    stop(paste("Erreur : la variable", variable, "n'existe pas dans le dataframe TD."))
+  }
+  if (!variable %in% names(df_TSA)) {
+    stop(paste("Erreur : la variable", variable, "n'existe pas dans le dataframe TSA."))
+  }
+  
+  # Filtrer les données sans valeurs manquantes pour la variable en question
+  df_TD <- df_TD[!is.na(df_TD[[variable]]), ]
+  df_TSA <- df_TSA[!is.na(df_TSA[[variable]]), ]
+  
+  # Vérification si les groupes "TSA" et "TD" sont bien dans les dataframes respectifs
+  if (nrow(df_TD) == 0) {
+    stop("Erreur : aucune donnée pour le groupe TD dans le dataframe df_TD.")
+  }
+  if (nrow(df_TSA) == 0) {
+    stop("Erreur : aucune donnée pour le groupe TSA dans le dataframe df_TSA.")
+  }
+  
+  # Calcul des moyennes et des variances pour chaque groupe
+  mean_TSA <- mean(df_TSA[[variable]], na.rm = TRUE)
+  mean_TD <- mean(df_TD[[variable]], na.rm = TRUE)
+  var_TSA <- var(df_TSA[[variable]], na.rm = TRUE)
+  var_TD <- var(df_TD[[variable]], na.rm = TRUE)
+  
+  # Calcul de l'écart-type combiné (pooled)
+  sd_pooled <- sqrt((var_TSA + var_TD) / 2)
+  
+  # Si l'écart-type combiné est égal à zéro, retourner NA pour éviter une division par zéro
+  if (sd_pooled == 0) {
+    return(NA)
+  }
+  
+  # Retourner la différence normalisée entre les moyennes
+  return(abs(mean_TSA - mean_TD) / sd_pooled)
+}
+
+# Appliquer la fonction SMD pour les variables d'intérêt
+# Assurez-vous que les colonnes sont au bon format dans les deux dataframes
+df_TD$Age <- as.numeric(as.character(df_TD$Age))
+df_TSA$Age <- as.numeric(as.character(df_TSA$Age))
+df_TD$Height <- as.numeric(as.character(df_TD$Height))
+df_TSA$Height <- as.numeric(as.character(df_TSA$Height))
+df_TD$Weight <- as.numeric(as.character(df_TD$Weight))
+df_TSA$Weight <- as.numeric(as.character(df_TSA$Weight))
+
+# Calculer la SMD pour les variables d'intérêt
+smd_values <- sapply(c("Age", "Height", "Weight"), function(col) {
+  tryCatch({
+    smd(df_TD, df_TSA, col)
+  }, error = function(e) {
+    message(paste("Erreur pour la variable", col, ":", e$message))
+    return(NA)  # Retourner NA en cas d'erreur
+  })
+})
+
+# Afficher les résultats de la SMD
+print(smd_values)
+
+# L'appariement est efficace dans un cas spécifique quand SMD < 0,1
+
+```
+
+
+
+
+
+
+
+```{r}
+# Comptage des valeurs manquantes par variable
+colSums(is.na(df))
+
+# Visualisation des valeurs manquantes (heatmap)
+library(ggplot2)
+library(reshape2)
+
+missing_data <- as.data.frame(colSums(is.na(df)))
+names(missing_data) <- c("Missing Values")
+missing_data$Variable <- rownames(missing_data)
+ggplot(missing_data, aes(x = Variable, y = `Missing Values`)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Nombre de valeurs manquantes par variable")
+
+
+# 1. Remplacer les valeurs manquantes par la médiane pour chaque groupe
+for (col in names(df)) {
+  if (is.numeric(df[[col]])) {
+    # Remplacer les NA par la médiane pour chaque groupe
+    df[[col]][df$GROUPE == "TSA" & is.na(df[[col]])] <- median(df[[col]][df$GROUPE == "TSA"], na.rm = TRUE)
+    df[[col]][df$GROUPE == "TD" & is.na(df[[col]])] <- median(df[[col]][df$GROUPE == "TD"], na.rm = TRUE)
+  }
+}
+
+
+# 2. Détecter et remplacer les valeurs aberrantes pour chaque groupe
+for (col in names(df)) {
+  if (is.numeric(df[[col]])) {
+    
+    # Calcul des bornes pour TSA
+    Q1_TSA <- quantile(df[[col]][df$GROUPE == "TSA"], 0.25, na.rm = TRUE)
+    Q3_TSA <- quantile(df[[col]][df$GROUPE == "TSA"], 0.75, na.rm = TRUE)
+    IQR_value_TSA <- Q3_TSA - Q1_TSA
+    lower_bound_TSA <- Q1_TSA - 1.5 * IQR_value_TSA
+    upper_bound_TSA <- Q3_TSA + 1.5 * IQR_value_TSA
+
+    # Calcul des bornes pour TD
+    Q1_TD <- quantile(df[[col]][df$GROUPE == "TD"], 0.25, na.rm = TRUE)
+    Q3_TD <- quantile(df[[col]][df$GROUPE == "TD"], 0.75, na.rm = TRUE)
+    IQR_value_TD <- Q3_TD - Q1_TD
+    lower_bound_TD <- Q1_TD - 1.5 * IQR_value_TD
+    upper_bound_TD <- Q3_TD + 1.5 * IQR_value_TD
+    
+    # Remplacer les valeurs aberrantes pour TSA par la médiane de TSA
+    df[[col]][df$GROUPE == "TSA" & (df[[col]] < lower_bound_TSA | df[[col]] > upper_bound_TSA)] <- 
+      median(df[[col]][df$GROUPE == "TSA"], na.rm = TRUE)
+    
+    # Remplacer les valeurs aberrantes pour TD par la médiane de TD
+    df[[col]][df$GROUPE == "TD" & (df[[col]] < lower_bound_TD | df[[col]] > upper_bound_TD)] <- 
+      median(df[[col]][df$GROUPE == "TD"], na.rm = TRUE)
+  }
+}
+```
+
+
+
+```{r}
+# Table descriptive par groupe (TSA vs TD)
+df_grouped_summary <- df %>%
+  group_by(GROUPE) %>%
+  summarise(
+    across(where(is.numeric), list(
+      mean = ~mean(., na.rm = TRUE),
+      sd = ~sd(., na.rm = TRUE),
+      median = ~median(., na.rm = TRUE),
+      min = ~min(., na.rm = TRUE),
+      max = ~max(., na.rm = TRUE)
+    ), .names = "{.col}_{.fn}")
+  )
+
+# Affichage des statistiques par groupe
+print(df_grouped_summary)
+```
+
+
+
+```{r}
+# Histogrammes pour toutes les variables numériques
+numeric_cols <- names(df)[sapply(df, is.numeric)]
+
+# Générer des histogrammes pour chaque variable
+for (col in numeric_cols) {
+  print( ggplot(df, aes(x = .data[[col]], fill = GROUPE)) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 15) +
+    labs(title = paste("Distribution de", col, "par groupe")) +
+    theme_minimal() ) 
+}
+
+```
+
+```{r}
+# Boxplots pour toutes les variables numériques
+for (col in numeric_cols) {
+  print(ggplot(df, aes(x = as.factor(GROUPE), y = .data[[col]], fill = as.factor(GROUPE))) +
+            geom_boxplot() +
+            labs(title = paste("Comparaison de", col, "entre groupes"), x = "Groupe", y = col) +
+            theme_minimal() )
+}
+```
+
+

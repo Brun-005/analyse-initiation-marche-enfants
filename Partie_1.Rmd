@@ -1,0 +1,764 @@
+---
+title: "Mon Document"
+output: word_document
+always_allow_html: true
+---
+
+
+
+## Chargement des données.
+```{r}
+library(readxl)
+donnees <- read_excel("RES_all_cleaned.xlsx")
+```
+
+## Q2.1
+L'objectif de cette question est de déterminer quelle valeur statistique est la plus représentive pour caractériser la performance d'un enfant à partir de ses 5 essais.
+
+##-- Hypothèses possible pour la sélection des valeurs 
+###--- Moyenne des 5 essais
+Elle représente l'ensemble des performances sur les 5 essais et réduit l'influence des variations aléatoires entre essais. Cependant elle est sensible aux valeurs extrêmes.
+
+###--- Médiane des 5 essais
+La médiane est plus robuste face aux valeurs extrêmes. Par contre elle ne prend pas compte toutes les données, seulement la valeur centrale.
+
+
+Dans cette étude, nous privilégions donc la médiane, car elle est plus robuste et offre une meilleure estimation de la tendance centrale sans être affectée par des erreurs de mesure ou des performances exceptionnelles dans certains essais.
+
+## Q2.2
+## Détection des valeurs manquantes
+```{r}
+
+# Vérifier les valeurs manquantes
+missing_values <- colSums(is.na(donnees))
+
+# Afficher les colonnes contenant des valeurs manquantes
+missing_values[missing_values > 0]
+
+```
+
+
+## Identification des valeurs aberrantes
+
+
+```{r}
+# Définition des groupes de variables
+time_vars <- c("TAju(ms)", "TExe(ms)", "TPas(ms)", "TLoad(ms)", "TUnload(ms)")
+
+cop_vars <- c("CoP_tot_AP(/Long)", "CoP_tot_ML(/Larg)", "CoP_loadAP(/Long)", 
+              "CoP_load_ML(/Larg)", "CoP_unload_ML(/Larg)")
+
+vitesse_cop_vars <- c("Vpic_load_AP(m/s)", "Vpic_load_ML(m/s)", "Vpic_unload_ML(m/s)")
+
+bos_com_vars <- c("BOS_AP_Init(m)", "BOS_ML_Init(m)", "MOS_AP_FOcr(/Long)", "MOS_ML_FOcr(/Larg)")
+
+anthropo_vars <- c("Weight", "Height", "Epaule", "Coude", "Poignet", "Main")
+# Vérifier que les colonnes existent dans la base de données
+vars_to_check <- c(time_vars, cop_vars, vitesse_cop_vars, bos_com_vars, anthropo_vars)
+vars_to_check <- vars_to_check[vars_to_check %in% colnames(donnees)]
+
+# Convertir les colonnes en numérique en évitant les erreurs
+donnees[vars_to_check] <- lapply(donnees[vars_to_check], function(x) as.numeric(as.character(x)))
+
+# Détection des valeurs aberrantes avec la méthode IQR
+detect_outliers <- function(x) {
+  x <- na.omit(x)  # Retirer les valeurs manquantes
+  Q1 <- quantile(x, 0.25, na.rm = TRUE)
+  Q3 <- quantile(x, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  return(x[x < lower_bound | x > upper_bound])  # Retourner les valeurs aberrantes plutôt que leurs indices
+}
+
+# Appliquer la fonction à chaque groupe de variables
+outliers_time <- lapply(donnees[time_vars], detect_outliers)
+outliers_cop <- lapply(donnees[cop_vars], detect_outliers)
+outliers_vitesse_cop <- lapply(donnees[vitesse_cop_vars], detect_outliers)
+outliers_bos_com <- lapply(donnees[bos_com_vars], detect_outliers)
+outliers_anthropo <- lapply(donnees[anthropo_vars], detect_outliers)
+
+# Afficher les indices des valeurs aberrantes pour chaque groupe de variables
+outliers_time
+outliers_cop
+outliers_vitesse_cop
+outliers_bos_com
+outliers_anthropo
+
+```
+
+### Visualisation des valeurs aberrantes avec des boxplots
+```{r}
+# Charger ggplot2 pour la visualisation
+library(ggplot2)
+library(reshape2)
+
+# Fusionner les données en format long pour ggplot
+df_long_time <- melt(donnees, id.vars = c("Sujet"), measure.vars = time_vars)
+df_long_cop <- melt(donnees, id.vars = c("Sujet"), measure.vars = cop_vars)
+df_long_vitesse_cop <- melt(donnees, id.vars = c("Sujet"), measure.vars = vitesse_cop_vars)
+df_long_bos_com <- melt(donnees, id.vars = c("Sujet"), measure.vars = bos_com_vars)
+df_long_anthropo <- melt(donnees, id.vars = c("Sujet"), measure.vars = anthropo_vars)
+
+# Tracer les boxplots pour chaque groupe de variables
+
+ggplot(df_long_time) + 
+  aes(x = variable, y = value) + 
+  geom_boxplot(outlier.colour = "red", outlier.shape = 8, fill = "lightblue") + 
+  labs(title = "Boxplots des variables temporelles", x = "Variables", y = "Valeurs") + 
+  theme_minimal()
+
+ggplot(df_long_cop) + 
+  aes(x = variable, y = value) + 
+  geom_boxplot(outlier.colour = "red", outlier.shape = 8, fill = "lightblue") + 
+  labs(title = "Boxplots des variables du CoP", x = "Variables", y = "Valeurs") + 
+  theme_minimal()
+
+ggplot(df_long_vitesse_cop) + 
+  aes(x = variable, y = value) + 
+  geom_boxplot(outlier.colour = "red", outlier.shape = 8, fill = "lightblue") + 
+  labs(title = "Boxplots des variables de vitesse du CoP", x = "Variables", y = "Valeurs") + 
+  theme_minimal()
+
+ggplot(df_long_bos_com) + 
+  aes(x = variable, y = value) + 
+  geom_boxplot(outlier.colour = "red", outlier.shape = 8, fill = "lightblue") + 
+  labs(title = "Boxplots des variables de BoS et CoM", x = "Variables", y = "Valeurs") + 
+  theme_minimal()
+
+ggplot(df_long_anthropo) + 
+  aes(x = variable, y = value) + 
+  geom_boxplot(outlier.colour = "red", outlier.shape = 8, fill = "lightblue") + 
+  labs(title = "Boxplots des variables anthropométriques", x = "Variables", y = "Valeurs") + 
+  theme_minimal()
+
+```
+
+### Correction des valeurs aberrantes (remplacement par la médiane)
+```{r}
+# Correction des valeurs aberrantes (remplacement par la médiane)
+correct_outliers <- function(data, vars) {
+  for (col in vars) {
+    Q1 <- quantile(data[[col]], 0.25, na.rm = TRUE)
+    Q3 <- quantile(data[[col]], 0.75, na.rm = TRUE)
+    IQR <- Q3 - Q1
+    lower_bound <- Q1 - 1.5 * IQR
+    upper_bound <- Q3 + 1.5 * IQR
+    
+    data[[col]] <- ifelse(data[[col]] < lower_bound | data[[col]] > upper_bound, 
+                          median(data[[col]], na.rm = TRUE), data[[col]])
+  }
+  return(data)
+}
+
+# Appliquer la correction aux différents groupes de variables
+donnees <- correct_outliers(donnees, time_vars)
+donnees <- correct_outliers(donnees, cop_vars)
+donnees <- correct_outliers(donnees, vitesse_cop_vars)
+donnees <- correct_outliers(donnees, bos_com_vars)
+donnees <- correct_outliers(donnees, anthropo_vars)
+
+```
+
+### Visualisation après correction
+```{r}
+# Conversion des données en format long après correction
+df_long_time_corrected <- melt(donnees, id.vars = c("Sujet"), measure.vars = time_vars)
+df_long_cop_corrected <- melt(donnees, id.vars = c("Sujet"), measure.vars = cop_vars)
+df_long_vitesse_cop_corrected <- melt(donnees, id.vars = c("Sujet"), measure.vars = vitesse_cop_vars)
+df_long_bos_com_corrected <- melt(donnees, id.vars = c("Sujet"), measure.vars = bos_com_vars)
+df_long_anthropo_corrected <- melt(donnees, id.vars = c("Sujet"), measure.vars = anthropo_vars)
+
+ggplot(df_long_time_corrected) + 
+  aes(x = variable, y = value) + 
+  geom_boxplot(outlier.colour = "red", outlier.shape = 8, fill = "lightgreen") + 
+  labs(title = "Boxplots des variables temporelles après correction", x = "Variables", y = "Valeurs") + 
+  theme_minimal()
+
+# Tracer les boxplots après correction
+ggplot(df_long_cop_corrected) + 
+  aes(x = variable, y = value) + 
+  geom_boxplot(outlier.colour = "red", outlier.shape = 8, fill = "lightgreen") + 
+  labs(title = "Boxplots des variables du CoP après correction", x = "Variables", y = "Valeurs") + 
+  theme_minimal()
+
+ggplot(df_long_vitesse_cop_corrected) + 
+  aes(x = variable, y = value) + 
+  geom_boxplot(outlier.colour = "red", outlier.shape = 8, fill = "lightgreen") + 
+  labs(title = "Boxplots des variables de vitesse du CoP après correction", x = "Variables", y = "Valeurs") + 
+  theme_minimal()
+
+ggplot(df_long_bos_com_corrected) + 
+  aes(x = variable, y = value) + 
+  geom_boxplot(outlier.colour = "red", outlier.shape = 8, fill = "lightgreen") + 
+  labs(title = "Boxplots des variables de BoS et CoM après correction", x = "Variables", y = "Valeurs") + 
+  theme_minimal()
+
+ggplot(df_long_anthropo_corrected) + 
+  aes(x = variable, y = value) + 
+  geom_boxplot(outlier.colour = "red", outlier.shape = 8, fill = "lightgreen") + 
+  labs(title = "Boxplots des variables anthropométriques après correction", x = "Variables", y = "Valeurs") + 
+  theme_minimal()
+
+```
+
+## Q2.3
+
+```{r}
+# Charger les bibliothèques nécessaires
+library(dplyr)
+library(tidyr)
+
+# Sélection des variables pertinentes
+selected_vars <- c(time_vars, cop_vars, vitesse_cop_vars, bos_com_vars, anthropo_vars)
+
+
+# Fonction pour calculer les statistiques descriptives
+desc_stats <- donnees %>%
+  select(all_of(selected_vars)) %>%
+  summarise_all(list(
+    Moyenne = mean,
+    Médiane = median,
+    Variance = var,
+    Ecart_Type = sd
+  ), na.rm = TRUE)
+
+# Afficher les résultats sous forme de tableau
+print(desc_stats)
+
+```
+
+
+### Histogrammes pour observer la distribution des variables temporelles
+```{r}
+# Transformer les données en format long
+library(tidyr)
+
+donnees_long <- donnees %>%
+  pivot_longer(cols = all_of(time_vars), names_to = "Variable", values_to = "Valeur")
+
+# Tracer tous les histogrammes avec facet_wrap
+ggplot(donnees_long, aes(x = Valeur)) +
+  geom_histogram(binwidth = 10, fill = "blue", color = "black", alpha = 0.7) +
+  facet_wrap(~Variable, scales = "free") +
+  labs(title = "Distribution des variables temporelles", x = "Valeurs", y = "Fréquence") +
+  theme_minimal()
+
+
+
+```
+
+
+###  Analyse des distributions avec des densités
+```{r}
+
+# Densités des variables temporelles
+donnees_long <- donnees %>%
+  select(all_of(time_vars)) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valeur")
+
+ggplot(donnees_long)+
+  aes(x = Valeur, fill = Variable) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Densité des variables temporelles", x = "Valeurs", y = "Densité") +
+  theme_minimal()
+
+```
+
+### Effectifs et statistiques anthropométriques
+```{r}
+library(kableExtra)
+# Création d'une variable pour les groupes d'âge
+donnees <- donnees %>%
+  mutate(Groupe_Age = ifelse(Age <= 8, "6-8 ans", "9-11 ans"))
+
+# Moyennes des variables temporelles par groupe d'âge
+age_means <- donnees %>%
+  group_by(Groupe_Age) %>%
+  summarise(across(all_of(time_vars), mean, na.rm = TRUE))
+
+# Affichage formaté du tableau
+kable(age_means, caption = "Comparaison des performances selon l’âge") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+```
+
+
+```{r}
+# Création du tableau des effectifs et des statistiques sur la taille et le poids
+stats_anthropo <- donnees %>%
+  group_by(Groupe_Age) %>%
+  summarise(
+    Effectif = n(),
+    Poids_Moyen = mean(Weight, na.rm = TRUE),
+    Taille_Moyenne = mean(Height, na.rm = TRUE),
+    Poids_Médiane = median(Weight, na.rm = TRUE),
+    Taille_Médiane = median(Height, na.rm = TRUE)
+  )
+
+# Affichage formaté du tableau
+kable(stats_anthropo, caption = "Effectifs et caractéristiques anthropométriques par groupe d’âge") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, background = "#4CAF50", color = "white") %>%  # Couleur de l'entête
+  row_spec(1, background = "#f2f2f2") %>%  # Première ligne colorée en gris clair
+  row_spec(2, background = "#ffffff")  # Seconde ligne en blanc pour alterner
+
+```
+
+
+```{r}
+ggplot(donnees, aes(x = Weight, fill = Groupe_Age)) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 10) +
+  labs(title = "Distribution du poids par groupe d'âge", x = "Poids (kg)", y = "Fréquence") +
+  theme_minimal()
+
+```
+
+```{r}
+# Transformation des données en format long pour ggplot
+donnees_long_cop <- donnees %>%
+  select(all_of(cop_vars)) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valeur")
+
+# Tracer les histogrammes avec facet_wrap
+ggplot(donnees_long_cop, aes(x = Valeur, fill = Variable)) +
+  geom_histogram(binwidth = 0.05, color = "black", alpha = 0.6) +
+  facet_wrap(~Variable, scales = "free") +
+  labs(title = "Distribution des variables liées au CoP", x = "Valeurs", y = "Fréquence") +
+  theme_minimal()
+```
+
+
+
+
+
+## 3. Effet de l’âge
+
+## Q3.1
+
+### Vérification des conditions pour le test statistique
+```{r}
+# Charger les bibliothèques nécessaires
+library(dplyr)
+library(ggplot2)
+library(car)
+
+# Définition des variables d'anticipation
+anticipation_vars <- c("TAju(ms)", "TExe(ms)", "TPas(ms)", "TLoad(ms)", "TUnload(ms)",
+                       "CoP_tot_AP(/Long)", "CoP_tot_ML(/Larg)", "CoP_load_AP(/Long)", 
+                       "CoP_load_ML(/Larg)", "CoP_unload_AP(/Long)", "CoP_unload_ML(/Larg)",
+                       "Vpic_load_AP(m/s)", "Vpic_load_ML(m/s)", "Vpic_unload_AP(m/s)", 
+                       "Vpic_unload_ML(m/s)", "BOS_AP_init(m)", "BOS_ML_init(m)", 
+                       "MOS_AP_F0cr(Long)", "MOS_ML_F0cr(Larg)")
+
+# Vérification des variables présentes
+anticipation_vars <- intersect(anticipation_vars, colnames(donnees))
+
+# Création des groupes d'âge
+donnees <- donnees %>%
+  mutate(Groupe_Age = ifelse(Age <= 8, "6-8 ans", "9-11 ans"))
+
+# Vérification des conditions pour chaque variable d'anticipation
+results <- list()
+
+for (var in anticipation_vars) {
+  # Test de normalité (Shapiro-Wilk)
+  shapiro_6_8 <- shapiro.test(donnees %>% filter(Groupe_Age == "6-8 ans") %>% pull(var))
+  shapiro_9_11 <- shapiro.test(donnees %>% filter(Groupe_Age == "9-11 ans") %>% pull(var))
+  
+  # Test d'homogénéité des variances (Levene)
+  levene <- leveneTest(donnees[[var]], donnees$Groupe_Age)
+  
+  # Stockage des résultats
+  results[[var]] <- list(
+    Shapiro_6_8 = shapiro_6_8$p.value,
+    Shapiro_9_11 = shapiro_9_11$p.value,
+    Levene = levene$`Pr(>F)`[1]
+  )
+}
+
+# Affichage des résultats
+print(results)
+
+```
+
+### Application des tests
+✅ Si Shapiro-Wilk est non significatif (p > 0.05) → On peut supposer une normalité
+✅ Si Levene est non significatif (p > 0.05) → Les variances sont homogènes
+Si les données sont normales et homogènes → On applique le test t de Student.
+Sinon → On applique le test de Mann-Whitney.
+
+```{r}
+# Initialisation d'une liste pour stocker les résultats des tests
+test_results <- list()
+
+# Parcourir chaque variable d'anticipation
+for (var in anticipation_vars) {
+  # Vérification des conditions pour choisir le test
+  if (results[[var]]$Shapiro_6_8 > 0.05 & results[[var]]$Shapiro_9_11 > 0.05) {
+    if (results[[var]]$Levene > 0.05) {
+      # Test t de Student (variances homogènes)
+      test_result <- t.test(donnees %>% filter(Groupe_Age == "6-8 ans") %>% pull(var),
+                            donnees %>% filter(Groupe_Age == "9-11 ans") %>% pull(var),
+                            var.equal = TRUE)
+    } else {
+      # Test t de Student (variances hétérogènes)
+      test_result <- t.test(donnees %>% filter(Groupe_Age == "6-8 ans") %>% pull(var),
+                            donnees %>% filter(Groupe_Age == "9-11 ans") %>% pull(var),
+                            var.equal = FALSE)
+    }
+  } else {
+    # Test de Mann-Whitney (si normalité non respectée)
+    test_result <- wilcox.test(donnees %>% filter(Groupe_Age == "6-8 ans") %>% pull(var),
+                               donnees %>% filter(Groupe_Age == "9-11 ans") %>% pull(var))
+  }
+  
+  # Stocker les résultats
+  test_results[[var]] <- test_result
+}
+
+# Afficher les résultats des tests
+print(test_results)
+
+```
+
+### Visualisation avec des boxplots
+```{r}
+# Transformation des données en format long
+library(reshape2)
+
+donnees_long <- melt(donnees, id.vars = "Groupe_Age", measure.vars = anticipation_vars)
+
+# Tracer les boxplots
+ggplot(donnees_long, aes(x = Groupe_Age, y = value, fill = Groupe_Age)) +
+  geom_boxplot(alpha = 0.7, outlier.colour = "red") +
+  facet_wrap(~variable, scales = "free") +
+  labs(title = "Comparaison des variables d'anticipation selon l'âge",
+       x = "Groupe d'âge", y = "Valeurs") +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+# Création d'un tableau des statistiques par groupe d'âge
+stats_anticipation <- donnees %>%
+  group_by(Groupe_Age) %>%
+  summarise(across(all_of(anticipation_vars), list(
+    Moyenne = mean,
+    Médiane = median
+  ), na.rm = TRUE))
+
+# Affichage du tableau
+library(kableExtra)
+kable(stats_anticipation, caption = "Moyennes et médianes des variables d'anticipation par groupe d'âge") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+```
+
+### Tableau des résultats des tests statistiques
+```{r}
+# Création d'un dataframe pour stocker les résultats
+test_summary <- tibble(
+  Variable = anticipation_vars,
+  Test_utilisé = sapply(anticipation_vars, function(var) {
+    if (results[[var]]$Shapiro_6_8 > 0.05 & results[[var]]$Shapiro_9_11 > 0.05) {
+      if (results[[var]]$Levene > 0.05) "Test t de Student (var égal)" else "Test t de Student (var inégal)"
+    } else {
+      "Test de Mann-Whitney"
+    }
+  }),
+  p_value = sapply(anticipation_vars, function(var) test_results[[var]]$p.value),
+  Significatif = sapply(anticipation_vars, function(var) ifelse(test_results[[var]]$p.value < 0.05, "Oui", "Non"))
+)
+
+# Affichage du tableau avec formatage
+library(kableExtra)
+kable(test_summary, caption = "Résultats des tests statistiques") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+```
+
+
+```{r}
+# Calcul des moyennes par groupe
+moyennes_par_groupe <- donnees %>%
+  group_by(Groupe_Age) %>%
+  summarise(across(all_of(anticipation_vars), mean, na.rm = TRUE), .groups = "drop")
+
+# Transformation en format long
+moyennes_par_groupe_long <- moyennes_par_groupe %>%
+  pivot_longer(cols = -Groupe_Age, names_to = "Variable", values_to = "Moyenne")
+
+# Fusion avec les résultats des tests
+test_summary <- left_join(test_summary, moyennes_par_groupe_long, by = "Variable")
+
+# Affichage du tableau avec formatage
+library(kableExtra)
+kable(test_summary, caption = "Résultats des tests statistiques et moyennes par groupe") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+```
+
+
+## Q3.2
+### Création des groupes d'âge
+```{r}
+donnees <- donnees %>%
+  mutate(Groupe_Age3 = case_when(
+    Age < 8 ~ "6-7 ans",
+    Age >= 8 & Age < 10 ~ "8-9 ans",
+    Age >= 10 & Age < 12 ~ "10-11 ans"
+  ))
+# Vérification de la répartition des groupes d'âge
+print(table(donnees$Groupe_Age3))
+
+
+```
+
+### Test de normalité (Shapiro-Wilk)
+Nous allons appliquer le test de Shapiro-Wilk pour vérifier si les données suivent une distribution normale pour chaque variable et groupe d'âge.
+```{r}
+# Initialiser une liste pour stocker les p-values des tests de normalité
+normality_tests <- list()
+
+for (var in anticipation_vars) {
+  normality_tests[[var]] <- donnees %>%
+    group_by(Groupe_Age3) %>%
+    summarise(p_value = shapiro.test(get(var))$p.value, .groups = "drop")
+}
+
+# Convertir en DataFrame
+normality_results <- bind_rows(lapply(names(normality_tests), function(v) {
+  df <- normality_tests[[v]]
+  df$Variable <- v
+  return(df)
+}))
+
+# Affichage des résultats
+print(normality_results)
+
+```
+
+
+
+
+### Test d’homogénéité des variances (Levene)
+Nous allons tester l’égalité des variances avec le test de Levene.
+```{r}
+homogeneity_tests <- lapply(anticipation_vars, function(var) {
+  leveneTest(as.formula(paste0("`", var, "` ~ Groupe_Age3")), data = donnees)
+})
+
+
+# Convertir en DataFrame
+homogeneity_results <- tibble(
+  Variable = anticipation_vars,
+  p_value = sapply(homogeneity_tests, function(test) test$`Pr(>F)`[1])
+)
+
+# Affichage des résultats
+print(homogeneity_results)
+
+```
+
+
+### Sélection et application du test statistique
+
+Nous allons maintenant choisir entre l’ANOVA et le test de Kruskal-Wallis en fonction des résultats des tests de normalité et d’homogénéité des variances.
+```{r}
+# 📌 Initialisation des listes de résultats
+anova_results <- list()
+kruskal_results <- list()
+
+# 📌 Boucle pour chaque variable d'anticipation
+for (var in anticipation_vars) {
+  
+  # Récupération des p-values des tests de normalité et d'homogénéité
+  normal_pvalues <- normality_results %>% filter(Variable == var) %>% pull(p_value)
+  homogeneity_pvalue <- homogeneity_results %>% filter(Variable == var) %>% pull(p_value)
+
+  # 📌 Vérification que les valeurs existent et ne sont pas NA
+  if (length(normal_pvalues) == 0 || length(homogeneity_pvalue) == 0 || 
+      any(is.na(normal_pvalues)) || is.na(homogeneity_pvalue)) {
+    print(paste("⚠ Valeur manquante pour la variable :", var, "→ Test ignoré"))
+    next  # Passer à la variable suivante
+  }
+
+  # 📌 Sélection du test en fonction des conditions
+  if (all(normal_pvalues > 0.05, na.rm = TRUE) && homogeneity_pvalue > 0.05) {
+    anova_results[[var]] <- aov(as.formula(paste0("`", var, "` ~ Groupe_Age3")), data = donnees)
+  } else {
+    kruskal_results[[var]] <- kruskal.test(as.formula(paste0("`", var, "` ~ Groupe_Age3")), data = donnees)
+  }
+}
+
+# 📌 Affichage des résultats
+print(anova_results)
+print(kruskal_results)
+```
+
+
+### Présentation des résultats sous forme de tableau
+Nous allons maintenant regrouper tous les résultats dans un tableau et afficher les p-values ainsi que l’interprétation de la significativité.
+```{r}
+test_summary <- tibble(
+  Variable = anticipation_vars,
+  Test_utilisé = sapply(anticipation_vars, function(var) {
+    if (!is.null(anova_results[[var]])) "ANOVA" else "Kruskal-Wallis"
+  }),
+  p_value = sapply(anticipation_vars, function(var) {
+    if (!is.null(anova_results[[var]])) summary(anova_results[[var]])[[1]][["Pr(>F)"]][1]
+    else kruskal_results[[var]]$p.value
+  }),
+  Significatif = sapply(anticipation_vars, function(var) {
+    ifelse(!is.null(anova_results[[var]]) && summary(anova_results[[var]])[[1]][["Pr(>F)"]][1] < 0.05, "Oui",
+           ifelse(!is.null(kruskal_results[[var]]) && kruskal_results[[var]]$p.value < 0.05, "Oui", "Non"))
+  })
+)
+
+# Affichage formaté du tableau
+library(kableExtra)
+kable(test_summary, caption = "Résultats des tests statistiques pour comparer les trois groupes d'âge") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+```
+
+
+### Visualisation des résultats avec des boxplots
+```{r}
+library(ggplot2)
+library(reshape2)
+
+donnees_long <- melt(donnees, id.vars = "Groupe_Age3", measure.vars = anticipation_vars)
+
+ggplot(donnees_long, aes(x = Groupe_Age3, y = value, fill = Groupe_Age3)) +
+  geom_boxplot(alpha = 0.7, outlier.colour = "red") +
+  facet_wrap(~variable, scales = "free") +
+  labs(title = "Comparaison des variables d'anticipation selon l'âge",
+       x = "Groupe d'âge", y = "Valeurs") +
+  theme_minimal()
+
+```
+
+
+## Q3.3
+
+### Méthode alternative : Régression Linéaire32
+Pourquoi une régression linéaire ?
+✅ Précision accrue : On évite la perte d’information causée par la catégorisation de l’âge.
+✅ Analyse plus fine : On peut tester directement l'effet de l'âge sur chaque variable.
+✅ Visualisation des tendances : On peut examiner les relations linéaires entre l’âge et les variables mesurées.
+Nous allons ajuster un modèle de régression linéaire pour chaque variable d'anticipation en considérant l’âge comme prédicteur.
+```{r}
+# 📌 Vérification des noms des variables
+anticipation_vars <- anticipation_vars[anticipation_vars %in% colnames(donnees)]
+
+# 📌 Initialisation d'une liste pour stocker les résultats
+regression_results <- list()
+
+# 📊 Modèle linéaire pour chaque variable
+for (var in anticipation_vars) {
+  # Vérifier que la variable existe
+  if (!(var %in% colnames(donnees))) {
+    print(paste("Variable manquante :", var))
+    next  # Passer à la variable suivante
+  }
+  
+  # Utilisation des backticks pour gérer les noms avec caractères spéciaux
+  model <- lm(as.formula(paste0("`", var, "` ~ Age")), data = donnees)
+  regression_results[[var]] <- model  # Stocker l'objet modèle, pas summary(model)
+}
+
+# 📌 Extraction des résultats sous forme de tableau
+regression_summary <- tibble(
+  Variable = anticipation_vars,
+  Coefficient_Age = sapply(regression_results, function(m) coef(m)[2]),  # Coefficient de Age
+  p_value = sapply(regression_results, function(m) summary(m)$coefficients[2,4])  # p-value du test
+)
+
+# 📊 Affichage des résultats sous forme de tableau
+library(kableExtra)
+kable(regression_summary, caption = "Résultats de la régression linéaire entre l'âge et les variables d'anticipation") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+```
+
+
+
+
+### Visualisation avec des Graphiques
+```{r}
+# Transformer les données en format long
+library(reshape2)
+donnees_long <- melt(donnees, id.vars = "Age", measure.vars = anticipation_vars, 
+                     variable.name = "Variable", value.name = "Valeur")
+
+# Tracer les graphiques de régression
+library(ggplot2)
+ggplot(donnees_long, aes(x = Age, y = Valeur)) +
+  geom_point(alpha = 0.5) +  # Points des observations
+  geom_smooth(method = "lm", col = "blue") +  # Régression linéaire
+  facet_wrap(~Variable, scales = "free") +  # Séparer les graphiques par variable
+  labs(title = "Effet de l'âge sur les variables d'anticipation",
+       x = "Âge (années)", y = "Valeur mesurée") +
+  theme_minimal()
+
+
+```
+
+
+
+## Q3.4
+Évaluer l’effet de l’âge sur la taille et le poids
+Pour répondre à cette question, nous allons effectuer plusieurs analyses :
+
+    Analyse de la corrélation entre âge, taille et poids 📊
+    Régression linéaire simple : Évaluer l’effet de l’âge sur la taille et le poids séparément.
+    Régression linéaire multiple : Vérifier si l’effet de l’âge persiste après ajustement pour la taille et le poids
+
+### Analyse de la corrélation entre l’âge, la taille et le poids
+Avant de réaliser une régression, nous devons explorer les relations entre ces variables en calculant des coefficients de corrélation.
+```{r}
+#install.packages("ggcorrplot")
+# Calcul des corrélations
+cor_matrix <- donnees %>% 
+  select(Age, Height, Weight) %>% 
+  cor(use = "complete.obs")
+
+# Affichage de la matrice de corrélation
+library(ggcorrplot)
+ggcorrplot(cor_matrix, lab = TRUE, method = "circle", type = "lower", 
+           title = "Corrélation entre l'âge, la taille et le poids")
+
+```
+
+
+
+### Régression linéaire simple : Effet de l’âge sur la taille et le poids
+Nous allons réaliser deux modèles de régression pour voir si l'âge influence significativement la taille et le poids.
+```{r}
+# Régression de la taille en fonction de l'âge
+modele_taille <- lm(Height ~ Age, data = donnees)
+summary(modele_taille)
+
+# Régression du poids en fonction de l'âge
+modele_poids <- lm(Weight ~ Age, data = donnees)
+summary(modele_poids)
+
+```
+
+### Régression linéaire multiple : Contrôler les effets confondants
+```{r}
+# Régression de la taille en fonction de l'âge et du poids
+modele_taille_multi <- lm(Height ~ Age + Weight, data = donnees)
+summary(modele_taille_multi)
+
+# Régression du poids en fonction de l'âge et de la taille
+modele_poids_multi <- lm(Weight ~ Age + Height, data = donnees)
+summary(modele_poids_multi)
+
+```
+
+
