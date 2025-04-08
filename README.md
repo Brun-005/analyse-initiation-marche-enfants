@@ -41,6 +41,7 @@ Partie_1/
   - Code.py
   - Code.Rmd
   - Res_all_cleaned.xlsx
+
 Partie_2/
   - Rapport.pdf
   - Code.Rmd
